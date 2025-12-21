@@ -1,0 +1,11 @@
+# Pythonの一時ファイル
+__pycache__/
+*.py[cod]
+
+# 仮想環境
+venv/
+.venv/
+
+# Streamlitの設定や秘密情報（APIキーなど）
+.streamlit/config.toml
+.streamlit/secrets.toml
