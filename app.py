@@ -33,14 +33,13 @@ else:
 stroke_width = st.sidebar.slider("ふとさ", 1, 100, 20) # 3歳児向けに最大値を100、初期値を20に
 
 # --- キャンバスの設置 ---
-# 背景を白に、サイズを大きく設定
 canvas_result = st_canvas(
     fill_color="rgba(255, 165, 0, 0.3)",
     stroke_width=stroke_width,
     stroke_color=stroke_color,
     background_color="#FFFFFF",
-    height=800, # 縦幅を大きく
-    use_container_width=True, # 横幅をiPadの画面幅いっぱいに
+    height=800,         # 縦幅（そのまま）
+    width=1000,         # ← 'use_container_width'を消して、'width=1000'に変更
     drawing_mode=drawing_mode,
     key="canvas",
 )
