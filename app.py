@@ -2,45 +2,54 @@ import streamlit as st
 from streamlit_drawable_canvas import st_canvas
 from PIL import Image
 import io
+import random
+import base64
 
+# =========================
 # ページ設定
-st.set_page_config(page_title="むすこくんのおえかきアプリ", layout="wide")
+# =========================
+st.set_page_config(
+    page_title="むすこくんのおえかきアプリ",
+    layout="wide"
+)
 
-# --- 🌈 虹色とキラキラの魔法 (CSSエフェクト) ---
-# ここで、線がキラキラ光って色がかわる「まほう」をかけているよ！
+# =========================
+# CSS
+# =========================
 st.markdown("""
-    <style>
-    /* 線のまわりを、虹色に光らせながら色を変化させるアニメーション */
-    @keyframes rainbow-neon {
-        0% { filter: hue-rotate(0deg) drop-shadow(0 0 5px rgba(255,0,0,0.8)) drop-shadow(0 0 15px rgba(255,0,0,0.4)); }
-        25% { filter: hue-rotate(90deg) drop-shadow(0 0 5px rgba(255,255,0,0.8)) drop-shadow(0 0 15px rgba(255,255,0,0.4)); }
-        50% { filter: hue-rotate(180deg) drop-shadow(0 0 5px rgba(0,255,0,0.8)) drop-shadow(0 0 15px rgba(0,255,0,0.4)); }
-        75% { filter: hue-rotate(270deg) drop-shadow(0 0 5px rgba(0,255,255,0.8)) drop-shadow(0 0 15px rgba(0,255,255,0.4)); }
-        100% { filter: hue-rotate(360deg) drop-shadow(0 0 5px rgba(255,0,255,0.8)) drop-shadow(0 0 15px rgba(255,0,255,0.4)); }
-    }
+<style>
+.stApp {
+    background-color: #fffaf0;
+    background-image: radial-gradient(#ffd700 1px, transparent 1px);
+    background-size: 30px 30px;
+}
 
-    /* 「にじいろペン」の時だけ、この魔法をキャンバスにかける */
-    .rainbow-mode canvas {
-        animation: rainbow-neon 4s linear infinite;
-    }
-
-    /* アプリ全体の背景を少し可愛く */
-    .stApp {
-        background-color: #fffaf0; /* やさしいクリーム色 */
-        background-image: radial-gradient(#ffd700 1px, transparent 1px); /* 金色のドット */
-        background-size: 30px 30px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+.big-button button {
+    font-size: 28px !important;
+    padding: 20px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 st.title("✨ どでか！にじいろ・おえかきボード ✨")
 
-# --- サイドバーの設定 ---
+# =========================
+# セッション初期化
+# =========================
+if "draw_count" not in st.session_state:
+    st.session_state.draw_count = 0
+
+if "canvas_key" not in st.session_state:
+    st.session_state.canvas_key = "canvas_0"
+
+# =========================
+# サイドバー
+# =========================
 st.sidebar.header("🎨 どうぐ箱")
 
 tool_type = st.sidebar.selectbox(
     "なにで かく？",
-    ("にじいろペン", "ふつうのペン", "しかく", "まる", "けしごむ")
+    ("にじいろペン", "ふつうのペン", "しかく", "まる", "スタンプ", "けしごむ")
 )
 
 mode_map = {
@@ -48,59 +57,114 @@ mode_map = {
     "ふつうのペン": "freedraw",
     "しかく": "rect",
     "まる": "circle",
-    "けしごむ": "freedraw"
+    "スタンプ": "point",
+    "けしごむ": "freedraw",
 }
+
 drawing_mode = mode_map[tool_type]
 
-# --- 色と魔法の設定 ---
-canvas_container_class = "" # 初期化
+# =========================
+# にじいろ
+# =========================
+def random_rainbow_color():
+    return random.choice([
+        "#FF0000", "#FF7F00", "#FFFF00",
+        "#00FF00", "#00FFFF", "#0000FF", "#8B00FF"
+    ])
 
 if tool_type == "にじいろペン":
-    # 虹色のベースになる明るい色
-    stroke_color = "#FF00FF" 
-    st.sidebar.markdown("---")
-    st.sidebar.success("🌟 いまは「まほうの にじいろ」だよ！\n\nせんが キラキラ ひかるよ！")
-    # キャンバスに魔法をかけるための目印
-    canvas_container_class = "rainbow-mode"
+    if "rainbow_color" not in st.session_state:
+        st.session_state.rainbow_color = random_rainbow_color()
+
+    stroke_color = st.session_state.rainbow_color
+
+    if st.sidebar.button("🌈 いろをかえる"):
+        st.session_state.rainbow_color = random_rainbow_color()
+
 elif tool_type == "けしごむ":
     stroke_color = "#FFFFFF"
 else:
-    stroke_color = st.sidebar.color_picker("なにいろに する？", "#FF00FF")
+    stroke_color = st.sidebar.color_picker("いろ", "#FF00FF")
 
-# 3歳児でも描きやすいように、少し太めを初期値に
 stroke_width = st.sidebar.slider("ふとさ", 1, 100, 30)
 
-# --- キャンバスの設置 ---
-# 魔法をかけるためのクラスをdivに設定
-st.markdown(f'<div class="{canvas_container_class}">', unsafe_allow_html=True)
+# =========================
+# スタンプ設定
+# =========================
+stamp_map = {
+    "🌈": "rainbow",
+    "🦕": "dino",
+    "⭐": "star",
+    "🚗": "car",
+}
 
+selected_stamp = None
+if tool_type == "スタンプ":
+    selected_stamp = st.sidebar.radio(
+        "どのスタンプ？",
+        list(stamp_map.keys())
+    )
+
+# =========================
+# Canvas
+# =========================
 canvas_result = st_canvas(
-    fill_color="rgba(255, 255, 255, 0)", # 塗りつぶしは透明に
+    fill_color="rgba(255,255,255,0)",
     stroke_width=stroke_width,
     stroke_color=stroke_color,
-    background_color="#FFFFFF", # キャンバスの背景は白
-    height=700,
+    background_color="#FFFFFF",
+    height=650,
     width=1000,
     drawing_mode=drawing_mode,
-    key="canvas",
+    key=st.session_state.canvas_key,
 )
 
-st.markdown('</div>', unsafe_allow_html=True)
+# =========================
+# 効果音（描いたらポン！）
+# =========================
+if canvas_result.json_data and len(canvas_result.json_data["objects"]) > st.session_state.draw_count:
+    st.session_state.draw_count += 1
 
-# --- 保存機能 ---
+    audio_html = """
+    <audio autoplay>
+        <source src="https://www.soundjay.com/buttons/sounds/button-16.mp3">
+    </audio>
+    """
+    st.markdown(audio_html, unsafe_allow_html=True)
+
+# =========================
+# 🎆 花火演出
+# =========================
+if st.session_state.draw_count > 0 and st.session_state.draw_count % 10 == 0:
+    st.balloons()
+    st.success("🎆 すごい！たくさん かいたね！")
+
+# =========================
+# 🧹 全部消す
+# =========================
+st.markdown("<div class='big-button'>", unsafe_allow_html=True)
+if st.button("🧹 ぜんぶ けす！"):
+    st.session_state.canvas_key = f"canvas_{random.randint(0,99999)}"
+    st.session_state.draw_count = 0
+st.markdown("</div>", unsafe_allow_html=True)
+
+# =========================
+# 保存
+# =========================
 if canvas_result.image_data is not None:
-    # 注: 保存される画像には、CSSのキラキラエフェクトは反映されません
-    img_data = canvas_result.image_data
-    img_pil = Image.fromarray(img_data.astype('uint8'), 'RGBA')
-    
+    img = Image.fromarray(
+        canvas_result.image_data.astype("uint8"),
+        "RGBA"
+    )
+
     buf = io.BytesIO()
-    img_pil.save(buf, format="PNG")
-    byte_im = buf.getvalue()
+    img.save(buf, format="PNG")
+    byte_img = buf.getvalue()
 
     st.sidebar.markdown("---")
     st.sidebar.download_button(
-        label="🌈 できた絵をほぞんする",
-        data=byte_im,
+        "💾 できたえを ほぞん",
+        data=byte_img,
         file_name="musuko_no_e.png",
-        mime="image/png"
+        mime="image/png",
     )
